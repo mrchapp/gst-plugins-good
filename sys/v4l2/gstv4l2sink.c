@@ -888,6 +888,18 @@ gst_v4l2sink_buffer_alloc (GstBaseSink * bsink, guint64 offset, guint size,
     /* initialize the buffer pool if not initialized yet (first buffer): */
     if (G_UNLIKELY (!v4l2sink->pool)) {
 
+      gboolean no_pending_streamon = FALSE;
+      char *driver = (char *) v4l2sink->v4l2object->vcap.driver;
+
+      /* the omap24xxvout driver wants us to start streaming before we
+       * queue the first buffer:
+       */
+      if (!strcmp ("omap24xxvout", driver)) {
+        GST_DEBUG_OBJECT (v4l2sink,
+            "enabling no_pending_streamon hack for omap24xxvout driver");
+        no_pending_streamon = TRUE;
+      }
+
       /* set_caps() might not be called yet.. so just to make sure: */
       if (!gst_v4l2sink_set_caps (bsink, caps)) {
         return GST_FLOW_ERROR;
@@ -909,7 +921,14 @@ gst_v4l2sink_buffer_alloc (GstBaseSink * bsink, guint64 offset, guint size,
       gst_v4l2_xoverlay_prepare_xwindow_id (v4l2sink->v4l2object, TRUE);
 #endif
 
-      v4l2sink->state = STATE_PENDING_STREAMON;
+      if (no_pending_streamon) {
+        if (!gst_v4l2_object_start_streaming (v4l2sink->v4l2object)) {
+          return GST_FLOW_ERROR;
+        }
+        v4l2sink->state = STATE_STREAMING;
+      } else {
+        v4l2sink->state = STATE_PENDING_STREAMON;
+      }
 
       GST_INFO_OBJECT (v4l2sink, "outputting buffers via mmap()");
 
@@ -996,6 +1015,7 @@ gst_v4l2sink_show_frame (GstBaseSink * bsink, GstBuffer * buf)
   if (!gst_v4l2_buffer_pool_qbuf (v4l2sink->pool, GST_V4L2_BUFFER (buf))) {
     return GST_FLOW_ERROR;
   }
+
   if (v4l2sink->state == STATE_PENDING_STREAMON) {
     if (!gst_v4l2_object_start_streaming (v4l2sink->v4l2object)) {
       return GST_FLOW_ERROR;
