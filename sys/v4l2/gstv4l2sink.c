@@ -900,6 +900,17 @@ gst_v4l2sink_buffer_alloc (GstBaseSink * bsink, guint64 offset, guint size,
         no_pending_streamon = TRUE;
       }
 
+      /* workaround for bug in omap_vout driver, when we ask for more
+       * than four buffers:
+       */
+      if (!strcmp ("omap_vout", driver)) {
+        if (v4l2sink->num_buffers > 4) {
+          v4l2sink->num_buffers = 4;
+          GST_DEBUG_OBJECT (v4l2sink,
+              "limiting to 4 buffers to work-around omap_vout driver bug");
+        }
+      }
+
       /* set_caps() might not be called yet.. so just to make sure: */
       if (!gst_v4l2sink_set_caps (bsink, caps)) {
         return GST_FLOW_ERROR;
