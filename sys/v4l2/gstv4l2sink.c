@@ -373,6 +373,7 @@ gst_v4l2sink_init (GstV4l2Sink * v4l2sink, GstV4l2SinkClass * klass)
 
   /* number of buffers requested */
   v4l2sink->num_buffers = PROP_DEF_QUEUE_SIZE;
+  v4l2sink->num_buffers_can_change = TRUE;
   v4l2sink->min_queued_bufs = PROP_DEF_MIN_QUEUED_BUFS;
 
   v4l2sink->probed_caps = NULL;
@@ -808,6 +809,7 @@ static gboolean
 gst_v4l2sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
 {
   GstV4l2Sink *v4l2sink = GST_V4L2SINK (bsink);
+  GstQuery *query;
   gint w = 0, h = 0;
   gboolean interlaced;
   struct v4l2_fmtdesc *format;
@@ -854,6 +856,39 @@ gst_v4l2sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
     GST_DEBUG_OBJECT (v4l2sink, "unrecognized caps!!");
     return FALSE;
   }
+
+  /* query to find if anyone upstream using these buffers has any
+   * minimum requirements:
+   */
+  query = gst_query_new_buffers (caps);
+  if (gst_element_query (GST_ELEMENT (v4l2sink), query)) {
+    gint min_buffers, min_width, min_height;
+
+    gst_query_parse_buffers_count (query, &min_buffers);
+
+    /* XXX need to account for some buffers used by queue, etc.. probably
+     * queue should handle query, pass on to sink pad, and then add some
+     * number of buffers to the min, so this value is dynamic depending
+     * on the pipeline?
+     */
+    if (min_buffers != -1) {
+      min_buffers += 3 + v4l2sink->min_queued_bufs;
+    }
+
+    if (min_buffers > v4l2sink->num_buffers) {
+      v4l2sink->num_buffers_can_change = FALSE;
+      v4l2sink->num_buffers = min_buffers;
+    }
+
+    gst_query_parse_buffers_dimensions (query, &min_width, &min_height);
+    if (min_width > w) {
+      w = min_width;
+    }
+    if (min_height > h) {
+      h = min_height;
+    }
+  }
+  gst_query_unref (query);
 
   if (!gst_v4l2_object_set_format (v4l2sink->v4l2object, format->pixelformat,
           w, h, interlaced)) {
@@ -944,6 +979,11 @@ gst_v4l2sink_buffer_alloc (GstBaseSink * bsink, guint64 offset, guint size,
       GST_INFO_OBJECT (v4l2sink, "outputting buffers via mmap()");
 
       if (v4l2sink->num_buffers != v4l2sink->pool->buffer_count) {
+        if (!v4l2sink->num_buffers_can_change) {
+          GST_WARNING_OBJECT (v4l2sink,
+              "I can't handle a differing number of buffers!!!!");
+          return GST_FLOW_ERROR;
+        }
         v4l2sink->num_buffers = v4l2sink->pool->buffer_count;
         g_object_notify (G_OBJECT (v4l2sink), "queue-size");
       }

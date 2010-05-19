@@ -58,6 +58,7 @@ struct _GstV4l2Sink {
   GstCaps *current_caps;        /* the current negotiated caps */
   GstV4l2BufferPool *pool;
   guint32 num_buffers;
+  gboolean num_buffers_can_change;
   guint32 min_queued_bufs;
 
   gint video_width, video_height;      /* original (unscaled) video w/h */
