@@ -581,24 +581,23 @@ gst_v4l2src_get_caps (GstBaseSrc * src)
   for (walk = v4l2src->v4l2object->formats; walk; walk = walk->next) {
     struct v4l2_fmtdesc *format;
 
-    GstStructure *template;
+    GstStructure *templates[MAX_STRUCTS_PER_FOURCC];
+    gint count, i;
 
     format = (struct v4l2_fmtdesc *) walk->data;
 
-    template = gst_v4l2_object_v4l2fourcc_to_structure (format->pixelformat);
+    count = gst_v4l2_object_v4l2fourcc_to_structures (format->pixelformat,
+        templates);
 
-    if (template) {
+    for (i = 0; i < count; i++) {
       GstCaps *tmp;
 
-      tmp =
-          gst_v4l2_object_probe_caps_for_format (v4l2src->v4l2object,
-          format->pixelformat, template);
+      tmp = gst_v4l2_object_probe_caps_for_format (v4l2src->v4l2object,
+          format->pixelformat, templates[i]);
       if (tmp)
         gst_caps_append (ret, tmp);
 
-      gst_structure_free (template);
-    } else {
-      GST_DEBUG_OBJECT (v4l2src, "unknown format %u", format->pixelformat);
+      gst_structure_free (templates[i]);
     }
   }
 
@@ -613,7 +612,7 @@ static gboolean
 gst_v4l2src_set_caps (GstBaseSrc * src, GstCaps * caps)
 {
   GstV4l2Src *v4l2src;
-  gint w = 0, h = 0;
+  gint w = 0, h = 0, rs = 0;
   gboolean interlaced;
   struct v4l2_fmtdesc *format;
   guint fps_n, fps_d;
@@ -635,11 +634,16 @@ gst_v4l2src_set_caps (GstBaseSrc * src, GstCaps * caps)
   }
 
   /* we want our own v4l2 type of fourcc codes */
-  if (!gst_v4l2_object_get_caps_info (v4l2src->v4l2object, caps, &format, &w,
-          &h, &interlaced, &fps_n, &fps_d, &size)) {
+  if (!gst_v4l2_object_get_caps_info (v4l2src->v4l2object, caps, &format,
+      &w, &h, &rs, &interlaced, &fps_n, &fps_d, &size)) {
     GST_INFO_OBJECT (v4l2src,
         "can't get capture format from caps %" GST_PTR_FORMAT, caps);
     return FALSE;
+  }
+
+  /* if necessary, update caps for rowstride */
+  if (rs) {
+    caps = gst_v4l2_object_update_rowstride (v4l2src->v4l2object, caps, rs);
   }
 
   GST_DEBUG_OBJECT (v4l2src, "trying to set_capture %dx%d at %d/%d fps, "

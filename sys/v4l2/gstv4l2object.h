@@ -179,15 +179,17 @@ GstCaps*      gst_v4l2_object_probe_caps_for_format (GstV4l2Object *v4l2object, 
                                              const GstStructure * template);
 
 gboolean      gst_v4l2_object_get_caps_info (GstV4l2Object *v4l2object, GstCaps *caps,
-                                             struct v4l2_fmtdesc **format, gint *w, gint *h,
+                                             struct v4l2_fmtdesc **format, gint *w, gint *h, gint *rs,
                                              gboolean * interlaced, guint *fps_n, guint *fps_d, guint *size);
 
+GstCaps *     gst_v4l2_object_update_rowstride (GstV4l2Object * v4l2object, GstCaps * caps, gint rs);
 
 GSList*       gst_v4l2_object_get_format_list  (GstV4l2Object *v4l2object);
 
 GstCaps*      gst_v4l2_object_get_all_caps (void);
 
-GstStructure* gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc);
+#define MAX_STRUCTS_PER_FOURCC 2
+gint          gst_v4l2_object_v4l2fourcc_to_structures (guint32 fourcc, GstStructure ** structures);
 
 gboolean      gst_v4l2_object_set_format (GstV4l2Object *v4l2object, guint32 pixelformat, guint32 width, guint32 height, gboolean interlaced);
 

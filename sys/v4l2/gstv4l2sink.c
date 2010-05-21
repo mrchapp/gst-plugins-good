@@ -776,24 +776,23 @@ gst_v4l2sink_get_caps (GstBaseSink * bsink)
   for (walk = v4l2sink->v4l2object->formats; walk; walk = walk->next) {
     struct v4l2_fmtdesc *format;
 
-    GstStructure *template;
+    GstStructure *templates[MAX_STRUCTS_PER_FOURCC];
+    gint count, i;
 
     format = (struct v4l2_fmtdesc *) walk->data;
 
-    template = gst_v4l2_object_v4l2fourcc_to_structure (format->pixelformat);
+    count = gst_v4l2_object_v4l2fourcc_to_structures (format->pixelformat,
+        templates);
 
-    if (template) {
+    for (i = 0; i < count; i++) {
       GstCaps *tmp;
 
-      tmp =
-          gst_v4l2_object_probe_caps_for_format (v4l2sink->v4l2object,
-          format->pixelformat, template);
+      tmp = gst_v4l2_object_probe_caps_for_format (v4l2sink->v4l2object,
+          format->pixelformat, templates[i]);
       if (tmp)
         gst_caps_append (ret, tmp);
 
-      gst_structure_free (template);
-    } else {
-      GST_DEBUG_OBJECT (v4l2sink, "unknown format %u", format->pixelformat);
+      gst_structure_free (templates[i]);
     }
   }
 
@@ -810,7 +809,7 @@ gst_v4l2sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
 {
   GstV4l2Sink *v4l2sink = GST_V4L2SINK (bsink);
   GstQuery *query;
-  gint w = 0, h = 0;
+  gint w = 0, h = 0, rs = 0;
   gboolean interlaced;
   struct v4l2_fmtdesc *format;
   guint fps_n, fps_d;
@@ -823,11 +822,36 @@ gst_v4l2sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
     return FALSE;
   }
 
+  /* we want our own v4l2 type of fourcc codes */
+  if (!gst_v4l2_object_get_caps_info (v4l2sink->v4l2object, caps,
+          &format, &w, &h, &rs, &interlaced, &fps_n, &fps_d, &size)) {
+    GST_DEBUG_OBJECT (v4l2sink, "can't get capture format from caps %p", caps);
+    return FALSE;
+  }
+
+  if (!format) {
+    GST_DEBUG_OBJECT (v4l2sink, "unrecognized caps!!");
+    return FALSE;
+  }
+
+  /* we need to make our own ref before we potentially update the
+   * caps, to avoid that we release a ref that is not owned by us
+   * when we make the caps writable
+   */
+  caps = gst_caps_ref (caps);
+
+  /* if necessary, update caps for rowstride */
+  if (rs) {
+    caps = gst_v4l2_object_update_rowstride (v4l2sink->v4l2object, caps, rs);
+    GST_DEBUG_OBJECT (v4l2sink, "updated caps: %" GST_PTR_FORMAT, caps);
+  }
+
   if (v4l2sink->current_caps) {
     GST_DEBUG_OBJECT (v4l2sink, "already have caps set.. are they equal?");
     LOG_CAPS (v4l2sink, v4l2sink->current_caps);
     if (gst_caps_is_equal (v4l2sink->current_caps, caps)) {
       GST_DEBUG_OBJECT (v4l2sink, "yes they are!");
+      gst_caps_unref (caps);
       return TRUE;
     }
     GST_DEBUG_OBJECT (v4l2sink, "no they aren't!");
@@ -842,18 +866,7 @@ gst_v4l2sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
      *
      */
     GST_DEBUG_OBJECT (v4l2sink, "warning, changing caps not supported yet");
-    return FALSE;
-  }
-
-  /* we want our own v4l2 type of fourcc codes */
-  if (!gst_v4l2_object_get_caps_info (v4l2sink->v4l2object, caps,
-          &format, &w, &h, &interlaced, &fps_n, &fps_d, &size)) {
-    GST_DEBUG_OBJECT (v4l2sink, "can't get capture format from caps %p", caps);
-    return FALSE;
-  }
-
-  if (!format) {
-    GST_DEBUG_OBJECT (v4l2sink, "unrecognized caps!!");
+    gst_caps_unref (caps);
     return FALSE;
   }
 
@@ -893,6 +906,7 @@ gst_v4l2sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
   if (!gst_v4l2_object_set_format (v4l2sink->v4l2object, format->pixelformat,
           w, h, interlaced)) {
     /* error already posted */
+    gst_caps_unref (caps);
     return FALSE;
   }
 
@@ -950,6 +964,9 @@ gst_v4l2sink_buffer_alloc (GstBaseSink * bsink, guint64 offset, guint size,
       if (!gst_v4l2sink_set_caps (bsink, caps)) {
         return GST_FLOW_ERROR;
       }
+
+      /* caps may have changed in _set_caps() if we need rowstride */
+      caps = v4l2sink->current_caps;
 
       GST_V4L2_CHECK_OPEN (v4l2sink->v4l2object);
 

@@ -1064,16 +1064,23 @@ gst_v4l2_object_get_format_list (GstV4l2Object * v4l2object)
   return v4l2object->formats;
 }
 
-
-GstStructure *
-gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc)
+/*
+ * gst_v4l2_object_v4l2fourcc_to_structures:
+ * @fourcc: requested format
+ * @structures: an array of at least MAX_STRUCTS_PER_FOURCC to return the
+ *   results in
+ *
+ * Returns the number of structures returned via structures
+ */
+gint
+gst_v4l2_object_v4l2fourcc_to_structures (guint32 fourcc,
+    GstStructure ** structures)
 {
-  GstStructure *structure = NULL;
-
+  gint count = 0;
   switch (fourcc) {
     case V4L2_PIX_FMT_MJPEG:   /* Motion-JPEG */
     case V4L2_PIX_FMT_JPEG:    /* JFIF JPEG */
-      structure = gst_structure_new ("image/jpeg", NULL);
+      structures[count++] = gst_structure_new ("image/jpeg", NULL);
       break;
     case V4L2_PIX_FMT_RGB332:
     case V4L2_PIX_FMT_RGB555:
@@ -1151,17 +1158,25 @@ gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc)
           g_assert_not_reached ();
           break;
       }
-      structure = gst_structure_new ("video/x-raw-rgb",
+      structures[count++] = gst_structure_new ("video/x-raw-rgb",
           "bpp", G_TYPE_INT, bpp,
           "depth", G_TYPE_INT, depth,
           "red_mask", G_TYPE_INT, r_mask,
           "green_mask", G_TYPE_INT, g_mask,
           "blue_mask", G_TYPE_INT, b_mask,
           "endianness", G_TYPE_INT, endianness, NULL);
+      structures[count++] = gst_structure_new ("video/x-raw-rgb-strided",
+          "bpp", G_TYPE_INT, bpp,
+          "depth", G_TYPE_INT, depth,
+          "red_mask", G_TYPE_INT, r_mask,
+          "green_mask", G_TYPE_INT, g_mask,
+          "blue_mask", G_TYPE_INT, b_mask,
+          "endianness", G_TYPE_INT, endianness,
+          "rowstride", GST_TYPE_INT_RANGE, 1, G_MAXINT, NULL);
       break;
     }
     case V4L2_PIX_FMT_GREY:    /*  8  Greyscale     */
-      structure = gst_structure_new ("video/x-raw-gray",
+      structures[count++] = gst_structure_new ("video/x-raw-gray",
           "bpp", G_TYPE_INT, 8, NULL);
       break;
     case V4L2_PIX_FMT_YYUV:    /* 16  YUV 4:2:2     */
@@ -1227,38 +1242,41 @@ gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc)
           g_assert_not_reached ();
           break;
       }
-      structure = gst_structure_new ("video/x-raw-yuv",
+      structures[count++] = gst_structure_new ("video/x-raw-yuv",
           "format", GST_TYPE_FOURCC, fcc, NULL);
+      structures[count++] = gst_structure_new ("video/x-raw-yuv-strided",
+          "format", GST_TYPE_FOURCC, fcc,
+          "rowstride", GST_TYPE_INT_RANGE, 1, G_MAXINT, NULL);
       break;
     }
     case V4L2_PIX_FMT_DV:
-      structure =
+      structures[count++] =
           gst_structure_new ("video/x-dv", "systemstream", G_TYPE_BOOLEAN, TRUE,
           NULL);
       break;
     case V4L2_PIX_FMT_MPEG:    /* MPEG          */
-      structure = gst_structure_new ("video/mpegts", NULL);
+      structures[count++] = gst_structure_new ("video/mpegts", NULL);
       break;
     case V4L2_PIX_FMT_WNVA:    /* Winnov hw compres */
       break;
 #ifdef V4L2_PIX_FMT_SBGGR8
     case V4L2_PIX_FMT_SBGGR8:
-      structure = gst_structure_new ("video/x-raw-bayer", NULL);
+      structures[count++] = gst_structure_new ("video/x-raw-bayer", NULL);
       break;
 #endif
 #ifdef V4L2_PIX_FMT_SN9C10X
     case V4L2_PIX_FMT_SN9C10X:
-      structure = gst_structure_new ("video/x-sonix", NULL);
+      structures[count++] = gst_structure_new ("video/x-sonix", NULL);
       break;
 #endif
 #ifdef V4L2_PIX_FMT_PWC1
     case V4L2_PIX_FMT_PWC1:
-      structure = gst_structure_new ("video/x-pwc1", NULL);
+      structures[count++] = gst_structure_new ("video/x-pwc1", NULL);
       break;
 #endif
 #ifdef V4L2_PIX_FMT_PWC2
     case V4L2_PIX_FMT_PWC2:
-      structure = gst_structure_new ("video/x-pwc2", NULL);
+      structures[count++] = gst_structure_new ("video/x-pwc2", NULL);
       break;
 #endif
     default:
@@ -1267,7 +1285,7 @@ gst_v4l2_object_v4l2fourcc_to_structure (guint32 fourcc)
       break;
   }
 
-  return structure;
+  return count;
 }
 
 
@@ -1278,22 +1296,23 @@ gst_v4l2_object_get_all_caps (void)
   static GstCaps *caps = NULL;
 
   if (caps == NULL) {
-    GstStructure *structure;
-
     guint i;
 
     caps = gst_caps_new_empty ();
     for (i = 0; i < GST_V4L2_FORMAT_COUNT; i++) {
-      structure =
-          gst_v4l2_object_v4l2fourcc_to_structure (gst_v4l2_formats[i].format);
-      if (structure) {
+      GstStructure *structures[MAX_STRUCTS_PER_FOURCC];
+      gint count, j;
+      count =
+          gst_v4l2_object_v4l2fourcc_to_structures (gst_v4l2_formats[i].format,
+          structures);
+      for (j = 0; j < count; j++) {
         if (gst_v4l2_formats[i].dimensions) {
-          gst_structure_set (structure,
+          gst_structure_set (structures[j],
               "width", GST_TYPE_INT_RANGE, 1, GST_V4L2_MAX_SIZE,
               "height", GST_TYPE_INT_RANGE, 1, GST_V4L2_MAX_SIZE,
               "framerate", GST_TYPE_FRACTION_RANGE, 0, 1, 100, 1, NULL);
         }
-        gst_caps_append_structure (caps, structure);
+        gst_caps_append_structure (caps, structures[j]);
       }
     }
   }
@@ -1306,12 +1325,14 @@ gst_v4l2_object_get_all_caps (void)
  * @caps: given input caps
  * @format: location for the v4l format
  * @w/@h: location for width and height
+ * @rs: required rowstride in bytes, or 0 if natural stride (based on format
+ *   and width) or not-applicable
  * @fps_n/@fps_d: location for framerate
  * @size: location for expected size of the frame or 0 if unknown
  */
 gboolean
 gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
-    struct v4l2_fmtdesc ** format, gint * w, gint * h,
+    struct v4l2_fmtdesc ** format, gint * w, gint * h, gint * rs,
     gboolean * interlaced, guint * fps_n, guint * fps_d, guint * size)
 {
   GstStructure *structure;
@@ -1319,10 +1340,12 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
   guint32 fourcc;
   const gchar *mimetype;
   guint outsize;
+  struct v4l2_format fmt = { 0, };
 
   /* default unknown values */
   fourcc = 0;
   outsize = 0;
+  *rs = 0;
 
   structure = gst_caps_get_structure (caps, 0);
 
@@ -1351,61 +1374,73 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
   *fps_n = gst_value_get_fraction_numerator (framerate);
   *fps_d = gst_value_get_fraction_denominator (framerate);
 
-  if (!strcmp (mimetype, "video/x-raw-yuv")) {
+  if (!strcmp (mimetype, "video/x-raw-yuv") ||
+      !strcmp (mimetype, "video/x-raw-yuv-strided")) {
     gst_structure_get_fourcc (structure, "format", &fourcc);
 
     switch (fourcc) {
       case GST_MAKE_FOURCC ('I', '4', '2', '0'):
       case GST_MAKE_FOURCC ('I', 'Y', 'U', 'V'):
         fourcc = V4L2_PIX_FMT_YUV420;
+        *rs = GST_ROUND_UP_4 (*w);
         outsize = GST_ROUND_UP_4 (*w) * GST_ROUND_UP_2 (*h);
         outsize += 2 * ((GST_ROUND_UP_8 (*w) / 2) * (GST_ROUND_UP_2 (*h) / 2));
         break;
       case GST_MAKE_FOURCC ('Y', 'U', 'Y', '2'):
         fourcc = V4L2_PIX_FMT_YUYV;
+        *rs = GST_ROUND_UP_2 (*w) * 2;
         outsize = (GST_ROUND_UP_2 (*w) * 2) * *h;
         break;
       case GST_MAKE_FOURCC ('Y', '4', '1', 'P'):
         fourcc = V4L2_PIX_FMT_Y41P;
+        *rs = GST_ROUND_UP_2 (*w) * 2;
         outsize = (GST_ROUND_UP_2 (*w) * 2) * *h;
         break;
       case GST_MAKE_FOURCC ('U', 'Y', 'V', 'Y'):
         fourcc = V4L2_PIX_FMT_UYVY;
+        *rs = GST_ROUND_UP_2 (*w) * 2;
         outsize = (GST_ROUND_UP_2 (*w) * 2) * *h;
         break;
       case GST_MAKE_FOURCC ('Y', 'V', '1', '2'):
         fourcc = V4L2_PIX_FMT_YVU420;
+        *rs = GST_ROUND_UP_4 (*w);
         outsize = GST_ROUND_UP_4 (*w) * GST_ROUND_UP_2 (*h);
         outsize += 2 * ((GST_ROUND_UP_8 (*w) / 2) * (GST_ROUND_UP_2 (*h) / 2));
         break;
       case GST_MAKE_FOURCC ('Y', '4', '1', 'B'):
         fourcc = V4L2_PIX_FMT_YUV411P;
+        *rs = GST_ROUND_UP_4 (*w);
         outsize = GST_ROUND_UP_4 (*w) * *h;
         outsize += 2 * ((GST_ROUND_UP_8 (*w) / 4) * *h);
         break;
       case GST_MAKE_FOURCC ('Y', '4', '2', 'B'):
         fourcc = V4L2_PIX_FMT_YUV422P;
+        *rs = GST_ROUND_UP_4 (*w);
         outsize = GST_ROUND_UP_4 (*w) * *h;
         outsize += 2 * ((GST_ROUND_UP_8 (*w) / 2) * *h);
         break;
       case GST_MAKE_FOURCC ('N', 'V', '1', '2'):
         fourcc = V4L2_PIX_FMT_NV12;
+        *rs = GST_ROUND_UP_4 (*w);
         outsize = GST_ROUND_UP_4 (*w) * GST_ROUND_UP_2 (*h);
         outsize += (GST_ROUND_UP_4 (*w) * *h) / 2;
         break;
       case GST_MAKE_FOURCC ('N', 'V', '2', '1'):
         fourcc = V4L2_PIX_FMT_NV21;
+        *rs = GST_ROUND_UP_4 (*w);
         outsize = GST_ROUND_UP_4 (*w) * GST_ROUND_UP_2 (*h);
         outsize += (GST_ROUND_UP_4 (*w) * *h) / 2;
         break;
 #ifdef V4L2_PIX_FMT_YVYU
       case GST_MAKE_FOURCC ('Y', 'V', 'Y', 'U'):
         fourcc = V4L2_PIX_FMT_YVYU;
+        *rs = GST_ROUND_UP_2 (*w) * 2;
         outsize = (GST_ROUND_UP_2 (*w) * 2) * *h;
         break;
 #endif
     }
-  } else if (!strcmp (mimetype, "video/x-raw-rgb")) {
+  } else if (!strcmp (mimetype, "video/x-raw-rgb") ||
+      !strcmp (mimetype, "video/x-raw-rgb-strided")) {
     gint bpp, endianness, r_mask;
 
     gst_structure_get_int (structure, "bpp", &bpp);
@@ -1415,20 +1450,25 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
     switch (bpp) {
       case 8:
         fourcc = V4L2_PIX_FMT_RGB332;
+        *rs = *w;
         break;
       case 15:
         fourcc = (endianness == G_LITTLE_ENDIAN) ?
             V4L2_PIX_FMT_RGB555 : V4L2_PIX_FMT_RGB555X;
+        *rs = 2 * *w;
         break;
       case 16:
         fourcc = (endianness == G_LITTLE_ENDIAN) ?
             V4L2_PIX_FMT_RGB565 : V4L2_PIX_FMT_RGB565X;
+        *rs = 2 * *w;
         break;
       case 24:
         fourcc = (r_mask == 0xFF) ? V4L2_PIX_FMT_BGR24 : V4L2_PIX_FMT_RGB24;
+        *rs = 3 * *w;
         break;
       case 32:
         fourcc = (r_mask == 0xFF) ? V4L2_PIX_FMT_BGR32 : V4L2_PIX_FMT_RGB32;
+        *rs = 4 * *w;
         break;
     }
   } else if (strcmp (mimetype, "video/x-dv") == 0) {
@@ -1458,6 +1498,25 @@ gst_v4l2_object_get_caps_info (GstV4l2Object * v4l2object, GstCaps * caps,
   if (fourcc == 0)
     return FALSE;
 
+  /* check what stride the driver supports */
+  fmt.type = v4l2object->type;
+  fmt.fmt.pix.width = *w;
+  fmt.fmt.pix.height = *h;
+  fmt.fmt.pix.pixelformat = fourcc;
+  fmt.fmt.pix.field = V4L2_FIELD_ANY;
+  fmt.fmt.pix.bytesperline = *rs;
+  if (v4l2_ioctl (v4l2object->video_fd, VIDIOC_TRY_FMT, &fmt) >= 0) {
+    if (fmt.fmt.pix.bytesperline == *rs) {
+      *rs = 0;
+    } else {
+      *rs = fmt.fmt.pix.bytesperline;
+    }
+    GST_INFO_OBJECT (v4l2object->element, "rowstride: %d", *rs);
+  } else {
+    GST_WARNING_OBJECT (v4l2object->element,
+        "VIDIOC_TRY_FMT should not fail.. driver problem?");
+  }
+
 done:
   *format = gst_v4l2_object_get_format_from_fourcc (v4l2object, fourcc);
   *size = outsize;
@@ -1465,6 +1524,36 @@ done:
   return TRUE;
 }
 
+/* Update caps to reflect rowstride that has been requested by the
+ * driver
+ */
+GstCaps *
+gst_v4l2_object_update_rowstride (GstV4l2Object * v4l2object,
+    GstCaps * caps, gint rs)
+{
+  GstStructure *structure;
+  const gchar *mimetype;
+
+  caps = gst_caps_make_writable (caps);
+
+  structure = gst_caps_get_structure (caps, 0);
+  mimetype = gst_structure_get_name (structure);
+
+  if (!strcmp (mimetype, "video/x-raw-yuv")) {
+    mimetype = "video/x-raw-yuv-strided";
+    gst_structure_set_name (structure, mimetype);
+  } else if (!strcmp (mimetype, "video/x-raw-rgb")) {
+    mimetype = "video/x-raw-rgb-strided";
+    gst_structure_set_name (structure, mimetype);
+  }
+
+  if (!strcmp (mimetype, "video/x-raw-yuv-strided") ||
+      !strcmp (mimetype, "video/x-raw-rgb-strided")) {
+    gst_structure_set (structure, "rowstride", G_TYPE_INT, rs, NULL);
+  }
+
+  return caps;
+}
 
 static gboolean
 gst_v4l2_object_get_nearest_size (GstV4l2Object * v4l2object,
