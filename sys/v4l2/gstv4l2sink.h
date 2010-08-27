@@ -75,6 +75,7 @@ struct _GstV4l2Sink {
   guint8 overlay_fields_set, crop_fields_set;
 
   guint8 state;
+  gint rotation;
 };
 
 struct _GstV4l2SinkClass {
