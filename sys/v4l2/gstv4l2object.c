@@ -886,6 +886,9 @@ gst_v4l2_object_format_get_rank (const struct v4l2_fmtdesc *fmt)
       break;
 
     case V4L2_PIX_FMT_NV12:    /* 12  Y/CbCr 4:2:0  */
+      rank = YUV_BASE_RANK + 11;
+      break;
+
     case V4L2_PIX_FMT_NV21:    /* 12  Y/CrCb 4:2:0  */
     case V4L2_PIX_FMT_YYUV:    /* 16  YUV 4:2:2     */
     case V4L2_PIX_FMT_HI240:   /*  8  8-bit color   */
