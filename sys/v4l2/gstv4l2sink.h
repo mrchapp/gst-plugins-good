@@ -76,6 +76,7 @@ struct _GstV4l2Sink {
 
   guint8 state;
   gint rotation;
+  gint flip;
 };
 
 struct _GstV4l2SinkClass {
