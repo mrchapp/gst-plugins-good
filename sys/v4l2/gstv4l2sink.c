@@ -881,6 +881,8 @@ gst_v4l2sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
 
     gst_query_parse_buffers_count (query, &min_buffers);
 
+    GST_DEBUG_OBJECT (v4l2sink, "min_buffers=%d", min_buffers);
+
     /* XXX need to account for some buffers used by queue, etc.. probably
      * queue should handle query, pass on to sink pad, and then add some
      * number of buffers to the min, so this value is dynamic depending
@@ -888,10 +890,10 @@ gst_v4l2sink_set_caps (GstBaseSink * bsink, GstCaps * caps)
      */
     if (min_buffers != -1) {
       min_buffers += 3 + v4l2sink->min_queued_bufs;
+      v4l2sink->num_buffers_can_change = FALSE;
     }
 
     if (min_buffers > v4l2sink->num_buffers) {
-      v4l2sink->num_buffers_can_change = FALSE;
       v4l2sink->num_buffers = min_buffers;
     }
 
@@ -972,7 +974,7 @@ gst_v4l2sink_buffer_alloc (GstBaseSink * bsink, guint64 offset, guint size,
        * than four buffers:
        */
       if (!strcmp ("omap_vout", driver)) {
-        if (v4l2sink->num_buffers > 4) {
+        if (v4l2sink->num_buffers_can_change && v4l2sink->num_buffers > 4) {
           v4l2sink->num_buffers = 4;
           GST_DEBUG_OBJECT (v4l2sink,
               "limiting to 4 buffers to work-around omap_vout driver bug");
