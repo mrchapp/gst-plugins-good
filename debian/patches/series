@@ -1,0 +1,4 @@
+03_pulse-rank.patch
+04_move_farsight_plugins_to_good.patch
+07_pulsesink_allow_larger_packets.patch
+99_ltmain_as-needed.patch
