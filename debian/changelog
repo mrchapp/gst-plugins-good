@@ -1,3 +1,9 @@
+gst-plugins-good0.10 (0.10.28-0ubuntu4+ti0.24.12) natty; urgency=low
+
+  * Add TI patches.
+
+ -- Daniel Diaz <ddiaz@ti.com>  Thu, 17 Mar 2011 12:36:44 -0600
+
 gst-plugins-good0.10 (0.10.28-0ubuntu4) natty; urgency=low
 
   * debian/control.in
