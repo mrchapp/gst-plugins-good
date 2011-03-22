@@ -1,0 +1,57 @@
+Description: Allow larger packets to reduce pulseaudio CPU usage and
+ crashes.
+Author: david.henningsson@canonical.com
+Forwarded: http://gstreamer-devel.966125.n4.nabble.com/Re-pulseaudio-discuss-PATCH-0-3-Fighting-rewinds-td3082006.html
+Index: gst-plugins-good0.10/ext/pulse/pulsesink.c
+===================================================================
+--- gst-plugins-good0.10.orig/ext/pulse/pulsesink.c	2011-03-18 12:15:27.294889302 -0400
++++ gst-plugins-good0.10/ext/pulse/pulsesink.c	2011-03-18 12:22:50.155538844 -0400
+@@ -1312,7 +1312,7 @@
+   inr = in_samples - 1;
+   outr = out_samples - 1;
+ 
+-  GST_DEBUG_OBJECT (psink, "in %d, out %d", inr, outr);
++  GST_DEBUG_OBJECT (psink, "in %d, out %d, bps %d", inr, outr, bps);
+ 
+   /* data_end points to the last sample we have to write, not past it. This is
+    * needed to properly handle reverse playback: it points to the last sample. */
+@@ -1339,11 +1339,11 @@
+ 
+     towrite = out_samples * bps;
+ 
+-    /* Only ever write segsize bytes at once. This will
+-     * also limit the PA shm buffer to segsize
++    /* Only ever write bufsize bytes at once. This will
++     * also limit the PA shm buffer to bufsize
+      */
+-    if (towrite > buf->spec.segsize)
+-      towrite = buf->spec.segsize;
++    if (towrite > bufsize)
++      towrite = bufsize;
+ 
+     if ((pbuf->m_writable < towrite) || (offset != pbuf->m_lastoffset)) {
+       /* if no room left or discontinuity in offset,
+@@ -1392,9 +1392,9 @@
+       }
+ 
+       /* make sure we only buffer up latency-time samples */
+-      if (pbuf->m_writable > buf->spec.segsize) {
++      if (pbuf->m_writable > bufsize) {
+         /* limit buffering to latency-time value */
+-        pbuf->m_writable = buf->spec.segsize;
++        pbuf->m_writable = bufsize;
+ 
+         GST_LOG_OBJECT (psink, "Limiting buffering to %" G_GSIZE_FORMAT,
+             pbuf->m_writable);
+@@ -1413,9 +1413,9 @@
+           pbuf->m_writable);
+ 
+       /* Just to make sure that we didn't get more than requested */
+-      if (pbuf->m_writable > buf->spec.segsize) {
++      if (pbuf->m_writable > bufsize) {
+         /* limit buffering to latency-time value */
+-        pbuf->m_writable = buf->spec.segsize;
++        pbuf->m_writable = bufsize;
+       }
+     }
+ 
