@@ -483,7 +483,7 @@ gst_v4l2_buffer_pool_get (GstV4l2BufferPool * pool, gboolean blocking)
     buf = g_async_queue_try_pop (pool->avail_buffers);
   }
 
-  if (buf) {
+  if (buf && buf != GST_V4L2_BUFFER_SENTINEL) {
     GST_V4L2_BUFFER_POOL_LOCK (pool);
     GST_BUFFER_SIZE (buf) = buf->vbuffer.length;
     GST_BUFFER_FLAG_UNSET (buf, 0xffffffff);

@@ -1029,7 +1029,7 @@ gst_v4l2sink_buffer_alloc (GstBaseSink * bsink, guint64 offset, guint size,
 
     v4l2buf = gst_v4l2_buffer_pool_get (v4l2sink->pool, TRUE);
 
-    if (G_LIKELY (v4l2buf)) {
+    if (G_LIKELY (v4l2buf && v4l2buf != GST_V4L2_BUFFER_SENTINEL)) {
       GST_DEBUG_OBJECT (v4l2sink, "allocated buffer: %p", v4l2buf);
       *buf = GST_BUFFER (v4l2buf);
       return GST_FLOW_OK;
@@ -1076,6 +1076,9 @@ gst_v4l2sink_event (GstBaseSink * bsink, GstEvent * event)
       gst_v4l2sink_sync_crop_fields (v4l2sink);
       return TRUE;
     }
+    case GST_EVENT_LIVE_FLUSH:
+      g_async_queue_push (v4l2sink->pool->avail_buffers, GST_V4L2_BUFFER_SENTINEL);
+      return TRUE;
     default:{
       if (GST_BASE_SINK_CLASS (parent_class)->event) {
         return GST_BASE_SINK_CLASS (parent_class)->event (bsink, event);

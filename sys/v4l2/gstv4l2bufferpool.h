@@ -43,6 +43,8 @@ GType gst_v4l2_buffer_pool_get_type (void);
 #define GST_IS_V4L2_BUFFER_POOL(obj) (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GST_TYPE_V4L2_BUFFER_POOL))
 #define GST_V4L2_BUFFER_POOL(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_V4L2_BUFFER_POOL, GstV4l2BufferPool))
 
+#define GST_V4L2_BUFFER_SENTINEL GINT_TO_POINTER(42)
+
 
 
 typedef struct _GstV4l2BufferPool GstV4l2BufferPool;
